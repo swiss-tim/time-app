@@ -1,0 +1,12 @@
+# Web framework
+streamlit
+
+# Data manipulation and plotting
+pandas
+altair
+plotly
+
+# Google API access
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
