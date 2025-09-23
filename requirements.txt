@@ -1,0 +1,8 @@
+streamlit
+pandas
+altair
+os
+io
+csv
+datetime
+plotly
