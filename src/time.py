@@ -227,14 +227,14 @@ def timeline_for_period(period):
     with col2:
         current_date = st.session_state.get(f'current_{period}')
         if period == "Day":
-            st.write(f"**{current_date}**")
+            st.markdown(f"<div style='text-align: center; font-size: 14px;'>{current_date}</div>", unsafe_allow_html=True)
         elif period == "Week":
             start_date, end_date = get_period_dates(period, current_date)
-            st.write(f"**{start_date} - {end_date}**")
+            st.markdown(f"<div style='text-align: center; font-size: 14px;'>{start_date} - {end_date}</div>", unsafe_allow_html=True)
         elif period == "Month":
-            st.write(f"**{current_date.strftime('%Y-%m')}**")
+            st.markdown(f"<div style='text-align: center; font-size: 14px;'>{current_date.strftime('%Y-%m')}</div>", unsafe_allow_html=True)
         elif period == "Year":
-            st.write(f"**{current_date.year}**")
+            st.markdown(f"<div style='text-align: center; font-size: 14px;'>{current_date.year}</div>", unsafe_allow_html=True)
 
     # --- BUG FIX for disappearing data ---
     # compute date range and fetch rows by filtering the main dataframe directly.
