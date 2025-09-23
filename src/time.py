@@ -219,22 +219,12 @@ def timeline_for_period(period):
         st.session_state[f"current_{period}"] = df_split['date'].max() if not df_split.empty else datetime.date.today()
 
     # navigation buttons (fast: only mutate session_state)
-    col1, col2, col3 = st.columns([1,2,1])
-    with col1:
-        st.button("←", key=f"left_{period}", on_click=shift_period_left, args=(period,))
-    with col3:
-        st.button("→", key=f"right_{period}", on_click=shift_period_right, args=(period,))
-    with col2:
-        current_date = st.session_state.get(f'current_{period}')
-        if period == "Day":
-            st.markdown(f"<div style='text-align: center; font-size: 14px;'>{current_date}</div>", unsafe_allow_html=True)
-        elif period == "Week":
-            start_date, end_date = get_period_dates(period, current_date)
-            st.markdown(f"<div style='text-align: center; font-size: 14px;'>{start_date} - {end_date}</div>", unsafe_allow_html=True)
-        elif period == "Month":
-            st.markdown(f"<div style='text-align: center; font-size: 14px;'>{current_date.strftime('%Y-%m')}</div>", unsafe_allow_html=True)
-        elif period == "Year":
-            st.markdown(f"<div style='text-align: center; font-size: 14px;'>{current_date.year}</div>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="display: inline-block; text-align: center;">
+        <button onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', key: 'left_""" + period + """', value: true}, '*')" style="margin: 0; padding: 0.5rem 1rem; display: inline-block;">←</button>
+        <button onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', key: 'right_""" + period + """', value: true}, '*')" style="margin: 0; padding: 0.5rem 1rem; display: inline-block;">→</button>
+    </div>
+    """, unsafe_allow_html=True)
 
     # --- BUG FIX for disappearing data ---
     # compute date range and fetch rows by filtering the main dataframe directly.
