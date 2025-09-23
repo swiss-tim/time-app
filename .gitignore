@@ -1,5 +1,20 @@
 ## Exclude data from source control by default ##
-/time
+venv/
+env/
+
+## ignore workspace config files
+.code-workspace
+
+## ignore credentials
+credentials.json
+token.json
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Streamlit secrets file
+.streamlit/secrets.toml
 
 ## Compressed Files ##
 *.zip
