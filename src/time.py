@@ -136,6 +136,15 @@ else:
 # Process the data
 df_split = build_split(df_raw)
 
+# Check if a new file was uploaded and reset date selection to latest date
+if uploaded_file is not None and not df_split.empty:
+    # Reset all period selections to the latest date in the new file
+    latest_date = df_split['date'].max()
+    for period in ['day', 'week', 'month', 'year']:
+        st.session_state[f"current_{period}"] = latest_date
+    # Set a flag to indicate file was uploaded
+    st.session_state['file_uploaded'] = True
+
 # Show data summary
 if not df_split.empty:
     st.markdown("### Data Summary")
@@ -216,6 +225,12 @@ def timeline_for_period(period):
     # init current period pointer
     if f"current_{period}" not in st.session_state:
         st.session_state[f"current_{period}"] = df_split['date'].max() if not df_split.empty else datetime.date.today()
+    
+    # If a new file was uploaded, force update to latest date
+    if st.session_state.get('file_uploaded', False) and not df_split.empty:
+        st.session_state[f"current_{period}"] = df_split['date'].max()
+        # Clear the flag after updating
+        st.session_state['file_uploaded'] = False
 
     # navigation buttons (fast: only mutate session_state)
     # Custom CSS to make buttons inline
