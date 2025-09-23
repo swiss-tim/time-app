@@ -244,6 +244,10 @@ def timeline_for_period(period):
     if 'date' not in period_df.columns and 'start' in period_df.columns:
         period_df['date'] = period_df['start'].dt.date
 
+    # Show copyable summary at the top
+    if not period_df.empty:
+        show_copyable_text(period, period_df)
+
     # --- Build chart from period_df ---
     if not period_df.empty:
         # Add formatted duration column for tooltips
@@ -403,11 +407,9 @@ def timeline_for_period(period):
         st.dataframe(timeline_display[cols].rename(columns={
             'activityName': 'Activity Name',
             'activityCategoryName': 'Category',
-            'duration_hours': 'Duration (hours)'
+            'duration_hours': 'Duration (hours)',
+            'note': 'Notes'
         }), height=300)
-
-    if not period_df.empty:
-        show_copyable_text(period, period_df)
 
 def show_copyable_text(period, period_df):
     # Get the date range for the selected tab
@@ -415,6 +417,9 @@ def show_copyable_text(period, period_df):
     df = period_df.copy()
     has_activity = 'activityName' in df.columns
 
+    # Calculate total hours for percentage calculations
+    total_hours = df['duration_hours'].sum()
+    
     # Use the same order for categories as in the timeline
     ordered_cats = [cat for cat in global_category_order if cat in df['activityCategoryName'].unique()]
     lines = []
@@ -423,11 +428,22 @@ def show_copyable_text(period, period_df):
         if cat_df.empty:
             continue
         total_cat_hours = cat_df['duration_hours'].sum()
-        lines.append(f"{hours_to_hhmm(total_cat_hours)} h {cat}")
+        cat_percentage = int(round((total_cat_hours / total_hours) * 100)) if total_hours > 0 else 0
+        lines.append(f"{cat_percentage:02d}% {hours_to_hhmm(total_cat_hours)}h {cat}")
         if has_activity:
-            for act in sorted(cat_df['activityName'].unique()):
+            # Get activities with their total durations and sort by duration (descending)
+            activity_durations = []
+            for act in cat_df['activityName'].unique():
                 act_df = cat_df[cat_df['activityName'] == act]
                 act_hours = act_df['duration_hours'].sum()
+                activity_durations.append((act, act_hours, act_df))
+            
+            # Sort by duration (longest first)
+            activity_durations.sort(key=lambda x: x[1], reverse=True)
+            
+            for act, act_hours, act_df in activity_durations:
+                # Calculate activity percentage of total time
+                act_percentage = int(round((act_hours / total_hours) * 100)) if total_hours > 0 else 0
                 
                 # Collect unique notes for this activity
                 notes = act_df['note'].dropna().astype(str).str.strip()
@@ -437,18 +453,68 @@ def show_copyable_text(period, period_df):
                     notes_str = ', '.join(notes[:3])  # Limit to first 3 notes
                     if len(notes) > 3:
                         notes_str += f' (+{len(notes)-3} more)'
-                    lines.append(f"   └─ {hours_to_hhmm(act_hours)} h {act} ({notes_str})")
+                    lines.append(f"   └─ {act_percentage:02d}% {hours_to_hhmm(act_hours)}h {act} ({notes_str})")
                 else:
-                    lines.append(f"   └─ {hours_to_hhmm(act_hours)} h {act}")
+                    lines.append(f"   └─ {act_percentage:02d}% {hours_to_hhmm(act_hours)}h {act}")
         else:
             for _, row in cat_df.iterrows():
                 lines.append(f"   └─ {hours_to_hhmm(row['duration_hours'])} h")
     text_block = "\n".join(lines)
+    
+    # Create columns for title and copy button
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.subheader(f"📋 {period} ({start_date} to {end_date})")
+    with col2:
+        if st.button("📋 Copy", key=f"copy_{period}", help="Copy summary to clipboard"):
+            # Store text in session state for JavaScript access
+            st.session_state[f"copy_trigger_{period}"] = True
+            st.write("✅ Copied to clipboard!")
+    
+    # Create a copyable text area
     st.text_area(
-        f"Copyable summary for {period} ({start_date} to {end_date})",
+        "Summary",
         text_block,
-        height=350
+        height=350,
+        key=f"summary_{period}",
+        help="Click the Copy button above or select all text and copy manually"
     )
+    
+    # Add mobile-friendly copy functionality when button is clicked
+    if st.session_state.get(f"copy_trigger_{period}", False):
+        # Clear the trigger
+        st.session_state[f"copy_trigger_{period}"] = False
+        
+        # Create a hidden textarea with the content and trigger copy
+        st.markdown(f"""
+        <div style="display: none;">
+            <textarea id="copyText_{period}" readonly>{text_block}</textarea>
+        </div>
+        <script>
+        function copyText_{period}() {{
+            const textArea = document.getElementById('copyText_{period}');
+            textArea.style.display = 'block';
+            textArea.select();
+            textArea.setSelectionRange(0, 99999); // For mobile devices
+            
+            try {{
+                const successful = document.execCommand('copy');
+                if (successful) {{
+                    console.log('Text copied successfully');
+                }} else {{
+                    console.log('Copy command failed');
+                }}
+            }} catch (err) {{
+                console.error('Copy failed:', err);
+            }}
+            
+            textArea.style.display = 'none';
+        }}
+        
+        // Trigger copy immediately
+        copyText_{period}();
+        </script>
+        """, unsafe_allow_html=True)
 
 # --- add missing helper and tabs so charts update when session_state changes ---
 def get_period_dates(period, current_date):
