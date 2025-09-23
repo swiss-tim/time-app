@@ -219,12 +219,22 @@ def timeline_for_period(period):
         st.session_state[f"current_{period}"] = df_split['date'].max() if not df_split.empty else datetime.date.today()
 
     # navigation buttons (fast: only mutate session_state)
+    # Custom CSS to make buttons inline
     st.markdown("""
-    <div style="display: inline-block; text-align: center;">
-        <button onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', key: 'left_""" + period + """', value: true}, '*')" style="margin: 0; padding: 0.5rem 1rem; display: inline-block;">←</button>
-        <button onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', key: 'right_""" + period + """', value: true}, '*')" style="margin: 0; padding: 0.5rem 1rem; display: inline-block;">→</button>
-    </div>
+    <style>
+    .stButton > button {
+        display: inline-block;
+        margin: 0 2px;
+    }
+    </style>
     """, unsafe_allow_html=True)
+    
+    # Use actual Streamlit buttons
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.button("←", key=f"left_{period}", on_click=shift_period_left, args=(period,))
+    with col2:
+        st.button("→", key=f"right_{period}", on_click=shift_period_right, args=(period,))
 
     # --- BUG FIX for disappearing data ---
     # compute date range and fetch rows by filtering the main dataframe directly.
