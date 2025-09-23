@@ -461,60 +461,60 @@ def show_copyable_text(period, period_df):
                 lines.append(f"   └─ {hours_to_hhmm(row['duration_hours'])} h")
     text_block = "\n".join(lines)
     
-    # Create columns for title and copy button
+    # Create columns for title and share button
     col1, col2 = st.columns([4, 1])
     with col1:
         st.subheader(f"📋 {period} ({start_date} to {end_date})")
     with col2:
-        if st.button("📋 Copy", key=f"copy_{period}", help="Copy summary to clipboard"):
+        if st.button("📤 Share", key=f"share_{period}", help="Share summary via mobile share menu"):
             # Store text in session state for JavaScript access
-            st.session_state[f"copy_trigger_{period}"] = True
-            st.write("✅ Copied to clipboard!")
+            st.session_state[f"share_trigger_{period}"] = True
+            st.write("✅ Opening share menu...")
     
-    # Create a copyable text area
+    # Add Web Share API functionality when button is clicked
+    if st.session_state.get(f"share_trigger_{period}", False):
+        # Clear the trigger
+        st.session_state[f"share_trigger_{period}"] = False
+        
+        # Use Web Share API for mobile sharing
+        # Escape the text properly for JavaScript
+        escaped_text = text_block.replace('`', '\\`').replace('$', '\\$').replace('\n', '\\n').replace('\r', '\\r')
+        
+        st.markdown(f"""
+        <script>
+        if (navigator.share) {{
+            navigator.share({{
+                title: '{period} Summary ({start_date} to {end_date})',
+                text: `{escaped_text}`,
+                url: window.location.href
+            }}).then(function() {{
+                console.log('Share successful');
+            }}).catch(function(err) {{
+                console.error('Share failed:', err);
+                // Fallback to copy to clipboard
+                navigator.clipboard.writeText(`{escaped_text}`).then(function() {{
+                    console.log('Text copied to clipboard as fallback');
+                }});
+            }});
+        }} else {{
+            // Fallback for browsers without Web Share API
+            navigator.clipboard.writeText(`{escaped_text}`).then(function() {{
+                console.log('Text copied to clipboard (Web Share API not available)');
+            }}).catch(function(err) {{
+                console.error('Clipboard copy failed:', err);
+            }});
+        }}
+        </script>
+        """, unsafe_allow_html=True)
+    
+    # Display the text in a simple, selectable format
     st.text_area(
         "Summary",
         text_block,
         height=350,
         key=f"summary_{period}",
-        help="Click the Copy button above or select all text and copy manually"
+        help="Select all text (Ctrl+A) and copy (Ctrl+C), or use the Download button above"
     )
-    
-    # Add mobile-friendly copy functionality when button is clicked
-    if st.session_state.get(f"copy_trigger_{period}", False):
-        # Clear the trigger
-        st.session_state[f"copy_trigger_{period}"] = False
-        
-        # Create a hidden textarea with the content and trigger copy
-        st.markdown(f"""
-        <div style="display: none;">
-            <textarea id="copyText_{period}" readonly>{text_block}</textarea>
-        </div>
-        <script>
-        function copyText_{period}() {{
-            const textArea = document.getElementById('copyText_{period}');
-            textArea.style.display = 'block';
-            textArea.select();
-            textArea.setSelectionRange(0, 99999); // For mobile devices
-            
-            try {{
-                const successful = document.execCommand('copy');
-                if (successful) {{
-                    console.log('Text copied successfully');
-                }} else {{
-                    console.log('Copy command failed');
-                }}
-            }} catch (err) {{
-                console.error('Copy failed:', err);
-            }}
-            
-            textArea.style.display = 'none';
-        }}
-        
-        // Trigger copy immediately
-        copyText_{period}();
-        </script>
-        """, unsafe_allow_html=True)
 
 # --- add missing helper and tabs so charts update when session_state changes ---
 def get_period_dates(period, current_date):
