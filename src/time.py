@@ -115,8 +115,7 @@ if uploaded_file is not None:
                 csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')
                 df_raw = load_csv(csv_path)
             else:
-                st.success(f"✅ Successfully loaded {len(df_raw)} records from uploaded file: {uploaded_file.name}")
-                
+                pass
     except pd.errors.EmptyDataError:
         st.error("❌ Uploaded file is empty or invalid CSV format.")
         st.info("Falling back to default data file.")
