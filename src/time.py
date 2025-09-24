@@ -276,6 +276,8 @@ def timeline_for_period(period):
 
     # Show copyable summary at the top
     if not period_df.empty:
+        st.write(f"DEBUG: About to call summary for {period} with {len(period_df)} rows")
+        st.write(f"DEBUG: Period_df dates: {period_df['date'].unique()}")
         show_copyable_text(period, period_df)
 
     # --- Build chart from period_df ---
@@ -447,6 +449,8 @@ def show_copyable_text(period, period_df):
     start_date, end_date = get_period_dates(period, current_date)
     # Debug info for cloud deployment
     st.write(f"DEBUG: Summary using date {current_date} for {period}")
+    st.write(f"DEBUG: Period_df shape: {period_df.shape}")
+    st.write(f"DEBUG: Period_df date range: {period_df['date'].min()} to {period_df['date'].max()}")
     df = period_df.copy()
     has_activity = 'activityName' in df.columns
 
