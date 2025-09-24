@@ -145,6 +145,9 @@ if uploaded_file is not None and not df_split.empty:
     # Set a flag to indicate file was uploaded (for display purposes)
     st.session_state['file_uploaded'] = True
     st.success(f"📅 Date selection updated to latest date: {latest_date}")
+    # Debug info for cloud deployment
+    st.write(f"DEBUG: File uploaded, set all periods to {latest_date}")
+    st.write(f"DEBUG: Session state current_day: {st.session_state.get('current_day')}")
 
 # Show data summary
 if not df_split.empty:
@@ -229,7 +232,10 @@ def timeline_for_period(period):
     
     # If a new file was uploaded, force update to latest date
     if st.session_state.get('file_uploaded', False) and not df_split.empty:
-        st.session_state[f"current_{period}"] = df_split['date'].max()
+        latest_date = df_split['date'].max()
+        st.session_state[f"current_{period}"] = latest_date
+        # Debug info for cloud deployment
+        st.write(f"DEBUG: Updated {period} to {latest_date}")
         # Clear the flag after updating
         st.session_state['file_uploaded'] = False
     
@@ -445,7 +451,10 @@ def timeline_for_period(period):
 
 def show_copyable_text(period, period_df):
     # Get the date range for the selected tab
-    start_date, end_date = get_period_dates(period, st.session_state.get(f"current_{period}"))
+    current_date = st.session_state.get(f"current_{period}")
+    start_date, end_date = get_period_dates(period, current_date)
+    # Debug info for cloud deployment
+    st.write(f"DEBUG: Summary using date {current_date} for {period}")
     df = period_df.copy()
     has_activity = 'activityName' in df.columns
 
