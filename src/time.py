@@ -142,8 +142,9 @@ if uploaded_file is not None and not df_split.empty:
     latest_date = df_split['date'].max()
     for period in ['day', 'week', 'month', 'year']:
         st.session_state[f"current_{period}"] = latest_date
-    # Set a flag to indicate file was uploaded
+    # Set a flag to indicate file was uploaded (for display purposes)
     st.session_state['file_uploaded'] = True
+    st.success(f"📅 Date selection updated to latest date: {latest_date}")
 
 # Show data summary
 if not df_split.empty:
@@ -231,6 +232,14 @@ def timeline_for_period(period):
         st.session_state[f"current_{period}"] = df_split['date'].max()
         # Clear the flag after updating
         st.session_state['file_uploaded'] = False
+    
+    # Ensure we're not showing a date that doesn't exist in the data
+    if not df_split.empty:
+        available_dates = df_split['date'].unique()
+        current_date = st.session_state[f"current_{period}"]
+        if current_date not in available_dates:
+            # If current date doesn't exist in data, jump to the latest available date
+            st.session_state[f"current_{period}"] = df_split['date'].max()
 
     # navigation buttons (fast: only mutate session_state)
     # Custom CSS to make buttons inline
