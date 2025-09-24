@@ -228,16 +228,17 @@ def timeline_for_period(period):
     if f"current_{period}" not in st.session_state:
         st.session_state[f"current_{period}"] = df_split['date'].max() if not df_split.empty else datetime.date.today()
     
-    # Debug info for cloud deployment
-    st.write(f"DEBUG: Timeline function called for {period}, current date: {st.session_state.get(f'current_{period}')}")
-    
-    # Ensure we're not showing a date that doesn't exist in the data
+    # Force update to latest date if current date doesn't exist in data
     if not df_split.empty:
         available_dates = df_split['date'].unique()
         current_date = st.session_state[f"current_{period}"]
         if current_date not in available_dates:
             # If current date doesn't exist in data, jump to the latest available date
             st.session_state[f"current_{period}"] = df_split['date'].max()
+            st.write(f"DEBUG: Updated {period} from {current_date} to {df_split['date'].max()}")
+    
+    # Debug info for cloud deployment
+    st.write(f"DEBUG: Timeline function called for {period}, current date: {st.session_state.get(f'current_{period}')}")
 
     # navigation buttons (fast: only mutate session_state)
     # Custom CSS to make buttons inline
