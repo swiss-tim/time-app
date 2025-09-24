@@ -142,8 +142,6 @@ if uploaded_file is not None and not df_split.empty:
     latest_date = df_split['date'].max()
     for period in ['day', 'week', 'month', 'year']:
         st.session_state[f"current_{period}"] = latest_date
-    # Set a flag to indicate file was uploaded (for display purposes)
-    st.session_state['file_uploaded'] = True
     st.success(f"📅 Date selection updated to latest date: {latest_date}")
     # Debug info for cloud deployment
     st.write(f"DEBUG: File uploaded, set all periods to {latest_date}")
@@ -230,14 +228,8 @@ def timeline_for_period(period):
     if f"current_{period}" not in st.session_state:
         st.session_state[f"current_{period}"] = df_split['date'].max() if not df_split.empty else datetime.date.today()
     
-    # If a new file was uploaded, force update to latest date
-    if st.session_state.get('file_uploaded', False) and not df_split.empty:
-        latest_date = df_split['date'].max()
-        st.session_state[f"current_{period}"] = latest_date
-        # Debug info for cloud deployment
-        st.write(f"DEBUG: Updated {period} to {latest_date}")
-        # Clear the flag after updating
-        st.session_state['file_uploaded'] = False
+    # Debug info for cloud deployment
+    st.write(f"DEBUG: Timeline function called for {period}, current date: {st.session_state.get(f'current_{period}')}")
     
     # Ensure we're not showing a date that doesn't exist in the data
     if not df_split.empty:
