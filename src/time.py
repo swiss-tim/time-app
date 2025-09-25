@@ -511,11 +511,13 @@ def show_copyable_text(period, period_df):
     st.subheader(f"📋 {period} ({start_date} to {end_date})")
     
     # Display the text in a simple, selectable format
+    # Use a unique key that changes with the data to force update
+    unique_key = f"summary_{period}_{current_date}_{len(df)}"
     st.text_area(
         "Summary",
         text_block,
         height=350,
-        key=f"summary_{period}",
+        key=unique_key,
         help="Select all text (Ctrl+A) and copy (Ctrl+C)"
     )
 
