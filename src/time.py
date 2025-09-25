@@ -23,6 +23,11 @@ DEFAULT_CSV_PATH = os.path.join(
 TIMEZONE_PATTERN = r' GMT[+-]\d{2}:\d{2} '
 MILLISECONDS_PER_HOUR = 1000 * 60 * 60
 
+# Global category order for consistent display
+GLOBAL_CATEGORY_ORDER = [
+    'Sleep', 'Work', 'Active', 'Relax & Wonder',
+    'Responsibilities ', 'Emotional Work', 'Connect'
+]
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
@@ -110,33 +115,37 @@ def build_split(df):
         end = start + pd.Timedelta(milliseconds=duration_ms)
         current = start
         remaining_ms = duration_ms
+
         while current.date() < end.date():
             next_day = pd.Timestamp(
-                year=current.year, month=current.month, day=current.day) + pd.Timedelta(days=1)
+                year=current.year,
+                month=current.month,
+                day=current.day
+            ) + pd.Timedelta(days=1)
             ms_in_day = (next_day - current).total_seconds() * 1000
             records.append({
                 'start': current,
                 'end': next_day,
                 'activityCategoryName': row['activityCategoryName'],
-                # <-- FIX: preserve activityName
                 'activityName': row['activityName'],
-                'note': row.get('note', ''),  # <-- FIX: preserve note
+                'note': row.get('note', ''),
                 'duration_hours': ms_in_day / MILLISECONDS_PER_HOUR
             })
             remaining_ms -= ms_in_day
             current = next_day
+
         records.append({
             'start': current,
             'end': end,
             'activityCategoryName': row['activityCategoryName'],
-            # <-- FIX: preserve activityName
             'activityName': row['activityName'],
-            'note': row.get('note', ''),  # <-- FIX: preserve note
+            'note': row.get('note', ''),
             'duration_hours': remaining_ms / MILLISECONDS_PER_HOUR
         })
     df_split_local = pd.DataFrame(records)
     if not df_split_local.empty:
-        # The 'date' for grouping is derived directly from the naive start time.
+        # The 'date' for grouping is derived directly from the naive start
+        # time.
         df_split_local['date'] = df_split_local['start'].dt.date
     return df_split_local
 
@@ -149,7 +158,8 @@ st.markdown("### Data Loader")
 uploaded_file = st.file_uploader(
     "Choose a CSV file to analyze",
     type=['csv'],
-    help="Upload your time tracking data CSV file. If no file is uploaded, the default data will be used."
+    help="Upload your time tracking data CSV file. If no file is uploaded, "
+         "the default data will be used."
 )
 
 # Determine which file to use
@@ -159,35 +169,43 @@ if uploaded_file is not None:
         # Read the uploaded file
         df_raw = pd.read_csv(
             uploaded_file,
-            usecols=['activityCategoryName', 'activityName',
-                     'activityStartDate', 'activityDuration [ms]', 'note'],
+            usecols=[
+                'activityCategoryName',
+                'activityName',
+                'activityStartDate',
+                'activityDuration [ms]',
+                'note'],
             sep=',',
-            engine='python'
-        )
+            engine='python')
 
         # Validate the uploaded file has required columns
-        required_columns = ['activityCategoryName', 'activityName',
-                            'activityStartDate', 'activityDuration [ms]']
+        required_columns = [
+            'activityCategoryName',
+            'activityName',
+            'activityStartDate',
+            'activityDuration [ms]']
         missing_columns = [
             col for col in required_columns if col not in df_raw.columns]
 
         if missing_columns:
             st.error(
-                f"❌ Uploaded file is missing required columns: {', '.join(missing_columns)}")
+                f"❌ Uploaded file is missing required columns: "
+                f"{', '.join(missing_columns)}")
             st.info(
-                "Required columns: activityCategoryName, activityName, activityStartDate, activityDuration [ms]")
+                "Required columns: activityCategoryName, activityName, "
+                "activityStartDate, activityDuration [ms]")
             st.info("Falling back to default data file.")
             # Fallback to default file
-            csv_path = os.path.join(os.path.dirname(
-                __file__), '..', 'data', 'time.csv')
+            csv_path = os.path.join(
+                os.path.dirname(__file__), '..', 'data', 'time.csv')
             df_raw = load_csv(csv_path)
         else:
             # Check if file has data
             if df_raw.empty:
                 st.warning(
                     "⚠️ Uploaded file is empty. Falling back to default data file.")
-                csv_path = os.path.join(os.path.dirname(
-                    __file__), '..', 'data', 'time.csv')
+                csv_path = os.path.join(
+                    os.path.dirname(__file__), '..', 'data', 'time.csv')
                 df_raw = load_csv(csv_path)
             else:
                 pass
@@ -230,17 +248,22 @@ if not df_split.empty:
     with col1:
         st.metric("Total Records", len(df_raw))
     with col2:
-        st.metric("Date Range",
-                  f"{df_split['date'].min()} to {df_split['date'].max()}")
+        st.metric(
+            "Date Range",
+            f"{df_split['date'].min()} to {df_split['date'].max()}"
+        )
     with col3:
-        st.metric("Activity Categories",
-                  df_split['activityCategoryName'].nunique())
+        st.metric(
+            "Activity Categories",
+            df_split['activityCategoryName'].nunique())
 else:
     st.warning("⚠️ No valid data found in the selected file.")
 
 # --- BUG FIX for disappearing data ---
-# The pre-computed dictionary in session_state is removed to prevent intermittent lookup failures.
-# Data will be filtered directly from the main df_split dataframe in the timeline_for_period function.
+# The pre-computed dictionary in session_state is removed to prevent
+# intermittent lookup failures.
+# Data will be filtered directly from the main df_split dataframe in the
+# timeline_for_period function.
 
 # --- faster navigation: use on_click handlers that only mutate session state ---
 
@@ -304,8 +327,9 @@ else:
 
 # toggle to include/remove Sleep category (controls stacking + legend + pie)
 include_sleep = st.checkbox(
-    "Include 'Sleep' category", value=True, key='include_sleep')
-
+    "Include 'Sleep' category",
+    value=True,
+    key='include_sleep')
 # active order used for all charts (remove sleep when toggle is off)
 if include_sleep:
     active_category_order = global_category_order
@@ -327,7 +351,8 @@ def timeline_for_period(period):
         available_dates = df_split['date'].unique()
         current_date = st.session_state[f"current_{period}"]
         if current_date not in available_dates:
-            # If current date doesn't exist in data, jump to the latest available date
+            # If current date doesn't exist in data, jump to the latest
+            # available date
             st.session_state[f"current_{period}"] = df_split['date'].max()
 
     # navigation buttons (fast: only mutate session_state)
@@ -344,16 +369,28 @@ def timeline_for_period(period):
     # Use actual Streamlit buttons
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.button("←", key=f"left_{period}",
-                  on_click=shift_period_left, args=(period,))
+        st.button(
+            "←",
+            key=f"left_{period}",
+            on_click=shift_period_left,
+            args=(
+                period,
+            ))
     with col2:
-        st.button("→", key=f"right_{period}",
-                  on_click=shift_period_right, args=(period,))
+        st.button(
+            "→",
+            key=f"right_{period}",
+            on_click=shift_period_right,
+            args=(
+                period,
+            ))
 
     # --- BUG FIX for disappearing data ---
-    # compute date range and fetch rows by filtering the main dataframe directly.
+    # compute date range and fetch rows by filtering the main dataframe
+    # directly.
     start_date, end_date = get_period_dates(
-        period, st.session_state.get(f"current_{period}"))
+        period, st.session_state.get(
+            f"current_{period}"))
     if not df_split.empty:
         period_df = df_split[(df_split['date'] >= start_date) & (
             df_split['date'] <= end_date)].copy()
@@ -393,30 +430,47 @@ def timeline_for_period(period):
             period_df['cat_rank'] = period_df['Activity Category'].astype(
                 str).map(rank_map)
 
-            bars = alt.Chart(period_df).mark_bar(size=14).encode(
-                x=alt.X('start_dt:T',
-                        axis=alt.Axis(format='%H', title='', grid=True, tickCount=13, labelLimit=0)),
-                x2='end_dt:T',
-                y=alt.Y('Activity Category:N',
-                        title=None,
-                        axis=alt.Axis(labelLimit=0),
-                        scale=alt.Scale(domain=active_category_order)),
+            bars = alt.Chart(period_df).mark_bar(
+                size=14).encode(
+                x=alt.X(
+                    'start_dt:T',
+                    axis=alt.Axis(
+                        format='%H',
+                        title='',
+                        grid=True,
+                        tickCount=13,
+                        labelLimit=0)),                x2='end_dt:T',
+                y=alt.Y(
+                    'Activity Category:N',
+                    title=None,
+                    axis=alt.Axis(
+                        labelLimit=0),
+                    scale=alt.Scale(
+                        domain=active_category_order)),
                 color=alt.Color(
                     'Activity Category:N',
-                    scale=alt.Scale(domain=global_category_order,
-                                    scheme='category20'),
-                    legend=None
-                ),
+                    scale=alt.Scale(
+                        domain=global_category_order,
+                        scheme='category20'),
+                    legend=None),
                 tooltip=[
-                    alt.Tooltip('activityCategoryName:N', title='Category'),
-                    alt.Tooltip('start_dt:T', title='Start',
-                                format='%Y-%m-%d %H:%M'),
-                    alt.Tooltip('end_dt:T', title='End',
-                                format='%Y-%m-%d %H:%M'),
-                    alt.Tooltip('duration_hhmm:N', title='Duration (hh:mm)'),
-                    alt.Tooltip('activityName:N', title='Activity')
-                ]
-            )
+                    alt.Tooltip(
+                        'activityCategoryName:N',
+                        title='Category'),
+                    alt.Tooltip(
+                        'start_dt:T',
+                        title='Start',
+                        format='%Y-%m-%d %H:%M'),
+                    alt.Tooltip(
+                        'end_dt:T',
+                        title='End',
+                        format='%Y-%m-%d %H:%M'),
+                    alt.Tooltip(
+                        'duration_hhmm:N',
+                        title='Duration (hh:mm)'),
+                    alt.Tooltip(
+                        'activityName:N',
+                        title='Activity')])
             chart_day = bars.properties(
                 width=900,
                 title=f'Day timeline ({st.session_state.get(f"current_{period}")})',
@@ -431,7 +485,9 @@ def timeline_for_period(period):
                 'duration_hours'].sum().unstack(fill_value=0)
             agg = agg.sort_index()
             df_melt_period = agg.reset_index().melt(
-                id_vars='date', var_name='Activity Category', value_name='Duration (hours)')
+                id_vars='date',
+                var_name='Activity Category',
+                value_name='Duration (hours)')
             df_melt_period['date'] = pd.to_datetime(df_melt_period['date'])
             df_melt_period['Duration (hours)'] = pd.to_numeric(
                 df_melt_period['Duration (hours)'], errors='coerce').fillna(0)
@@ -460,9 +516,14 @@ def timeline_for_period(period):
                     color=alt.Color(
                         'Activity Category:N',
                         scale=alt.Scale(
-                            domain=global_category_order, scheme='category20'),
+                            domain=global_category_order, scheme='category20'
+                        ),
                         legend=alt.Legend(
-                            title='Activity Category', orient='bottom', direction='horizontal', columns=5)
+                            title='Activity Category',
+                            orient='bottom',
+                            direction='horizontal',
+                            columns=5
+                        )
                     ),
                     order=alt.Order('cat_rank:Q', sort='ascending'),
                     tooltip=[
@@ -489,8 +550,8 @@ def timeline_for_period(period):
         timeline_display['End Date'] = pd.to_datetime(
             timeline_display['end']).dt.strftime('%b-%d %a %H:%M')
 
-    # Pie chart: show category share for the selected period using the same colors
-    if not period_df.empty:
+    # Pie chart: show category share for the selected period using the same
+    # colors    if not period_df.empty:
         pie_df = (period_df.groupby('activityCategoryName')['duration_hours']
                   .sum()
                   .rename_axis('Category')
@@ -500,20 +561,44 @@ def timeline_for_period(period):
 
         if not pie_df.empty:
             pie_df['Percentage'] = (
-                pie_df['duration_hours'] / pie_df['duration_hours'].sum() * 100).round(1)
+                pie_df['duration_hours'] /
+                pie_df['duration_hours'].sum() *
+                100).round(1)
             pie_labels = pie_df.apply(
-                lambda r: f"{r['Category']}<br>{r['Percentage']}%", axis=1)
+                lambda r: f"{r['Category']}<br>{r['Percentage']}%",
+                axis=1
+            )
             # Use hours_to_hhmm for hover text
             pie_hovertext = pie_df.apply(
-                lambda r: f"{r['Category']}<br>{r['Percentage']}%<br>{hours_to_hhmm(r['duration_hours'])} h", axis=1)
-
-            # Define color_map here using Altair's category20 palette and global_category_order
+                lambda r: (
+                    f"{r['Category']}<br>{r['Percentage']}%<br>"
+                    f"{hours_to_hhmm(r['duration_hours'])} h"
+                ),
+                axis=1
+            )
+            # Define color_map here using Altair's category20 palette and
+            # global_category_order
             alt_category20 = [
-                "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78", "#2ca02c", "#98df8a",
-                "#d62728", "#ff9896", "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
-                "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7", "#bcbd22", "#dbdb8d",
-                "#17becf", "#9edae5"
-            ]
+                "#1f77b4",
+                "#aec7e8",
+                "#ff7f0e",
+                "#ffbb78",
+                "#2ca02c",
+                "#98df8a",
+                "#d62728",
+                "#ff9896",
+                "#9467bd",
+                "#c5b0d5",
+                "#8c564b",
+                "#c49c94",
+                "#e377c2",
+                "#f7b6d2",
+                "#7f7f7f",
+                "#c7c7c7",
+                "#bcbd22",
+                "#dbdb8d",
+                "#17becf",
+                "#9edae5"]
             color_map = {cat: alt_category20[i % len(
                 alt_category20)] for i, cat in enumerate(global_category_order)}
             pie_colors = [color_map.get(cat, "#CCCCCC")
@@ -531,8 +616,9 @@ def timeline_for_period(period):
                 marker=dict(colors=pie_colors),
                 showlegend=False
             ))
-            fig.update_traces(textposition='auto',
-                              insidetextorientation='horizontal')
+            fig.update_traces(
+                textposition='auto',
+                insidetextorientation='horizontal')
             fig.update_layout(
                 title=f'Category share ({period})',
                 height=600,
@@ -551,12 +637,15 @@ def timeline_for_period(period):
         cols += ['Start Date', 'End Date', 'duration_hours']
         cols = [c for c in cols if c in timeline_display.columns]
         st.subheader(f"Timeline ({period})")
-        st.dataframe(timeline_display[cols].rename(columns={
-            'activityName': 'Activity Name',
-            'activityCategoryName': 'Category',
-            'duration_hours': 'Duration (hours)',
-            'note': 'Notes'
-        }), height=300)
+        st.dataframe(
+            timeline_display[cols].rename(columns={
+                'activityName': 'Activity Name',
+                'activityCategoryName': 'Category',
+                'duration_hours': 'Duration (hours)',
+                'note': 'Notes'
+            }),
+            height=300
+        )
 
 
 def show_copyable_text(period, period_df):
@@ -571,7 +660,9 @@ def show_copyable_text(period, period_df):
 
     # Use the same order for categories as in the timeline
     ordered_cats = [
-        cat for cat in global_category_order if cat in df['activityCategoryName'].unique()]
+        cat for cat in global_category_order
+        if cat in df['activityCategoryName'].unique()
+    ]
     lines = []
     for cat in ordered_cats:
         cat_df = df[df['activityCategoryName'] == cat]
@@ -579,11 +670,15 @@ def show_copyable_text(period, period_df):
             continue
         total_cat_hours = cat_df['duration_hours'].sum()
         cat_percentage = int(
-            round((total_cat_hours / total_hours) * 100)) if total_hours > 0 else 0
+            round(
+                (total_cat_hours /
+                 total_hours) *
+                100)) if total_hours > 0 else 0
         lines.append(
             f"{cat_percentage:02d}% {hours_to_hhmm(total_cat_hours)}h {cat}")
         if has_activity:
-            # Get activities with their total durations and sort by duration (descending)
+            # Get activities with their total durations and sort by duration
+            # (descending)
             activity_durations = []
             for act in cat_df['activityName'].unique():
                 act_df = cat_df[cat_df['activityName'] == act]
@@ -596,8 +691,10 @@ def show_copyable_text(period, period_df):
             for act, act_hours, act_df in activity_durations:
                 # Calculate activity percentage of total time
                 act_percentage = int(
-                    round((act_hours / total_hours) * 100)) if total_hours > 0 else 0
-
+                    round(
+                        (act_hours /
+                         total_hours) *
+                        100)) if total_hours > 0 else 0
                 # Collect unique notes for this activity
                 notes = act_df['note'].dropna().astype(str).str.strip()
                 notes = notes[notes != ''].unique()
@@ -605,12 +702,15 @@ def show_copyable_text(period, period_df):
                 if len(notes) > 0:
                     notes_str = ', '.join(notes[:3])  # Limit to first 3 notes
                     if len(notes) > 3:
-                        notes_str += f' (+{len(notes)-3} more)'
+                        notes_str += f' (+{len(notes) - 3} more)'
                     lines.append(
-                        f"   └─ {act_percentage:02d}% {hours_to_hhmm(act_hours)}h {act} ({notes_str})")
+                        f"   └─ {act_percentage:02d}% "
+                        f"{hours_to_hhmm(act_hours)}h {act} ({notes_str})"
+                    )
                 else:
                     lines.append(
-                        f"   └─ {act_percentage:02d}% {hours_to_hhmm(act_hours)}h {act}")
+                        f"   └─ {act_percentage:02d}% {hours_to_hhmm(act_hours)}h {act}"
+                    )
         else:
             for _, row in cat_df.iterrows():
                 lines.append(f"   └─ {hours_to_hhmm(row['duration_hours'])} h")
@@ -650,8 +750,11 @@ def get_period_dates(period, current_date):
     elif period == "Month":
         start = current_date.replace(day=1)
         # get first day of next month then subtract one day
-        next_month = (pd.Timestamp(start) + pd.Timedelta(days=32)
-                      ).replace(day=1).date()
+        next_month = (
+            pd.Timestamp(start) +
+            pd.Timedelta(
+                days=32)).replace(
+            day=1).date()
         end = next_month - datetime.timedelta(days=1)
     elif period == "Year":
         start = current_date.replace(month=1, day=1)
