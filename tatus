@@ -148,4 +148,187 @@
          st.info("Falling back to default data file.")[m
          # Fallback to default file[m
 [31m-        csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')[m
-[32m+[m[32m        
+[32m+[m[32m        [1mdiff --cc src/time.py[m
+[1mindex 3292baf,a097625..0000000[m
+[1m--- a/src/time.py[m
+[1m+++ b/src/time.py[m
+[36m@@@ -23,6 -23,12 +23,11 @@@[m [mDEFAULT_CSV_PATH = os.path.join[m
+  TIMEZONE_PATTERN = r' GMT[+-]\d{2}:\d{2} '[m
+  MILLISECONDS_PER_HOUR = 1000 * 60 * 60[m
+  [m
+[32m+ # Global category order for consistent display[m
+[32m+ GLOBAL_CATEGORY_ORDER = [[m
+[32m+     'Sleep', 'Work', 'Active', 'Relax & Wonder',[m
+[32m+     'Responsibilities ', 'Emotional Work', 'Connect'[m
+[32m+ ][m
+[31m -[m
+  # =============================================================================[m
+  # UTILITY FUNCTIONS[m
+  # =============================================================================[m
+[36m@@@ -304,8 -328,10 +327,9 @@@[m [melse[m
+  [m
+  # toggle to include/remove Sleep category (controls stacking + legend + pie)[m
+  include_sleep = st.checkbox([m
+[31m-     "Include 'Sleep' category", value=True, key='include_sleep')[m
+[31m- [m
+[32m+     "Include 'Sleep' category",[m
+[32m+     value=True,[m
+[32m+     key='include_sleep')[m
+[31m -[m
+  # active order used for all charts (remove sleep when toggle is off)[m
+  if include_sleep:[m
+      active_category_order = global_category_order[m
+[36m@@@ -393,30 -432,48 +430,47 @@@[m [mdef timeline_for_period(period)[m
+              period_df['cat_rank'] = period_df['Activity Category'].astype([m
+                  str).map(rank_map)[m
+  [m
+[31m-             bars = alt.Chart(period_df).mark_bar(size=14).encode([m
+[31m-                 x=alt.X('start_dt:T',[m
+[31m-                         axis=alt.Axis(format='%H', title='', grid=True, tickCount=13, labelLimit=0)),[m
+[31m-                 x2='end_dt:T',[m
+[31m-                 y=alt.Y('Activity Category:N',[m
+[31m-                         title=None,[m
+[31m-                         axis=alt.Axis(labelLimit=0),[m
+[31m-                         scale=alt.Scale(domain=active_category_order)),[m
+[32m+             bars = alt.Chart(period_df).mark_bar([m
+[32m+                 size=14).encode([m
+[32m+                 x=alt.X([m
+[32m+                     'start_dt:T',[m
+[32m+                     axis=alt.Axis([m
+[32m+                         format='%H',[m
+[32m+                         title='',[m
+[32m+                         grid=True,[m
+[32m+                         tickCount=13,[m
+[31m -                        labelLimit=0)),[m
+[31m -                x2='end_dt:T',[m
+[32m++                        labelLimit=0)),                x2='end_dt:T',[m
+[32m+                 y=alt.Y([m
+[32m+                     'Activity Category:N',[m
+[32m+                     title=None,[m
+[32m+                     axis=alt.Axis([m
+[32m+                         labelLimit=0),[m
+[32m+                     scale=alt.Scale([m
+[32m+                         domain=active_category_order)),[m
+                  color=alt.Color([m
+                      'Activity Category:N',[m
+[31m-                     scale=alt.Scale(domain=global_category_order,[m
+[31m-                                     scheme='category20'),[m
+[31m-                     legend=None[m
+[31m-                 ),[m
+[32m+                     scale=alt.Scale([m
+[32m+                         domain=global_category_order,[m
+[32m+                         scheme='category20'),[m
+[32m+                     legend=None),[m
+                  tooltip=[[m
+[31m-                     alt.Tooltip('activityCategoryName:N', title='Category'),[m
+[31m-                     alt.Tooltip('start_dt:T', title='Start',[m
+[31m-                                 format='%Y-%m-%d %H:%M'),[m
+[31m-                     alt.Tooltip('end_dt:T', title='End',[m
+[31m-                                 format='%Y-%m-%d %H:%M'),[m
+[31m-                     alt.Tooltip('duration_hhmm:N', title='Duration (hh:mm)'),[m
+[31m-                     alt.Tooltip('activityName:N', title='Activity')[m
+[31m-                 ][m
+[31m-             )[m
+[32m+                     alt.Tooltip([m
+[32m+                         'activityCategoryName:N',[m
+[32m+                         title='Category'),[m
+[32m+                     alt.Tooltip([m
+[32m+                         'start_dt:T',[m
+[32m+                         title='Start',[m
+[32m+                         format='%Y-%m-%d %H:%M'),[m
+[32m+                     alt.Tooltip([m
+[32m+                         'end_dt:T',[m
+[32m+                         title='End',[m
+[32m+                         format='%Y-%m-%d %H:%M'),[m
+[32m+                     alt.Tooltip([m
+[32m+                         'duration_hhmm:N',[m
+[32m+                         title='Duration (hh:mm)'),[m
+[32m+                     alt.Tooltip([m
+[32m+                         'activityName:N',[m
+[32m+                         title='Activity')])[m
+              chart_day = bars.properties([m
+                  width=900,[m
+                  title=f'Day timeline ({st.session_state.get(f"current_{period}")})',[m
+[36m@@@ -489,8 -553,9 +550,8 @@@[m
+          timeline_display['End Date'] = pd.to_datetime([m
+              timeline_display['end']).dt.strftime('%b-%d %a %H:%M')[m
+  [m
+[31m-     # Pie chart: show category share for the selected period using the same colors[m
+[31m-     if not period_df.empty:[m
+[32m+     # Pie chart: show category share for the selected period using the same[m
+[31m -    # colors[m
+[31m -    if not period_df.empty:[m
+[32m++    # colors    if not period_df.empty:[m
+          pie_df = (period_df.groupby('activityCategoryName')['duration_hours'][m
+                    .sum()[m
+                    .rename_axis('Category')[m
+[36m@@@ -500,20 -565,45 +561,44 @@@[m
+  [m
+          if not pie_df.empty:[m
+              pie_df['Percentage'] = ([m
+[31m-                 pie_df['duration_hours'] / pie_df['duration_hours'].sum() * 100).round(1)[m
+[32m+                 pie_df['duration_hours'] /[m
+[32m+                 pie_df['duration_hours'].sum() *[m
+[32m+                 100).round(1)[m
+              pie_labels = pie_df.apply([m
+[31m-                 lambda r: f"{r['Category']}<br>{r['Percentage']}%", axis=1)[m
+[32m+                 lambda r: f"{r['Category']}<br>{r['Percentage']}%",[m
+[32m+                 axis=1[m
+[32m+             )[m
+              # Use hours_to_hhmm for hover text[m
+              pie_hovertext = pie_df.apply([m
+[31m-                 lambda r: f"{r['Category']}<br>{r['Percentage']}%<br>{hours_to_hhmm(r['duration_hours'])} h", axis=1)[m
+[31m- [m
+[31m-             # Define color_map here using Altair's category20 palette and global_category_order[m
+[32m+                 lambda r: ([m
+[32m+                     f"{r['Category']}<br>{r['Percentage']}%<br>"[m
+[32m+                     f"{hours_to_hhmm(r['duration_hours'])} h"[m
+[32m+                 ),[m
+[32m+                 axis=1[m
+[32m+             )[m
+[31m -[m
+[32m+             # Define color_map here using Altair's category20 palette and[m
+[32m+             # global_category_order[m
+              alt_category20 = [[m
+[31m-                 "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78", "#2ca02c", "#98df8a",[m
+[31m-                 "#d62728", "#ff9896", "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",[m
+[31m-                 "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7", "#bcbd22", "#dbdb8d",[m
+[31m-                 "#17becf", "#9edae5"[m
+[31m-             ][m
+[32m+                 "#1f77b4",[m
+[32m+                 "#aec7e8",[m
+[32m+                 "#ff7f0e",[m
+[32m+                 "#ffbb78",[m
+[32m+                 "#2ca02c",[m
+[32m+                 "#98df8a",[m
+[32m+                 "#d62728",[m
+[32m+                 "#ff9896",[m
+[32m+                 "#9467bd",[m
+[32m+                 "#c5b0d5",[m
+[32m+                 "#8c564b",[m
+[32m+                 "#c49c94",[m
+[32m+                 "#e377c2",[m
+[32m+                 "#f7b6d2",[m
+[32m+                 "#7f7f7f",[m
+[32m+                 "#c7c7c7",[m
+[32m+                 "#bcbd22",[m
+[32m+                 "#dbdb8d",[m
+[32m+                 "#17becf",[m
+[32m+                 "#9edae5"][m
+              color_map = {cat: alt_category20[i % len([m
+                  alt_category20)] for i, cat in enumerate(global_category_order)}[m
+              pie_colors = [color_map.get(cat, "#CCCCCC")[m
+[36m@@@ -596,8 -696,11 +691,10 @@@[m [mdef show_copyable_text(period, period_d[m
+              for act, act_hours, act_df in activity_durations:[m
+                  # Calculate activity percentage of total time[m
+                  act_percentage = int([m
+[31m-                     round((act_hours / total_hours) * 100)) if total_hours > 0 else 0[m
+[31m- [m
+[32m+                     round([m
+[32m+                         (act_hours /[m
+[32m+                          total_hours) *[m
+[32m+                         100)) if total_hours > 0 else 0[m
+[31m -[m
+                  # Collect unique notes for this activity[m
+                  notes = act_df['note'].dropna().astype(str).str.strip()[m
+                  notes = notes[notes != ''].unique()[m
