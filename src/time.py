@@ -143,9 +143,6 @@ if uploaded_file is not None and not df_split.empty:
     for period in ['day', 'week', 'month', 'year']:
         st.session_state[f"current_{period}"] = latest_date
     st.success(f"📅 Date selection updated to latest date: {latest_date}")
-    # Debug info for cloud deployment
-    st.write(f"DEBUG: File uploaded, set all periods to {latest_date}")
-    st.write(f"DEBUG: Session state current_day: {st.session_state.get('current_day')}")
 
 # Show data summary
 if not df_split.empty:
@@ -235,10 +232,6 @@ def timeline_for_period(period):
         if current_date not in available_dates:
             # If current date doesn't exist in data, jump to the latest available date
             st.session_state[f"current_{period}"] = df_split['date'].max()
-            st.write(f"DEBUG: Updated {period} from {current_date} to {df_split['date'].max()}")
-    
-    # Debug info for cloud deployment
-    st.write(f"DEBUG: Timeline function called for {period}, current date: {st.session_state.get(f'current_{period}')}")
 
     # navigation buttons (fast: only mutate session_state)
     # Custom CSS to make buttons inline
@@ -277,8 +270,6 @@ def timeline_for_period(period):
 
     # Show copyable summary at the top
     if not period_df.empty:
-        st.write(f"DEBUG: About to call summary for {period} with {len(period_df)} rows")
-        st.write(f"DEBUG: Period_df dates: {period_df['date'].unique()}")
         show_copyable_text(period, period_df)
 
     # --- Build chart from period_df ---
@@ -448,19 +439,11 @@ def show_copyable_text(period, period_df):
     # Get the date range for the selected tab
     current_date = st.session_state.get(f"current_{period}")
     start_date, end_date = get_period_dates(period, current_date)
-    # Debug info for cloud deployment
-    st.write(f"DEBUG: Summary using date {current_date} for {period}")
-    st.write(f"DEBUG: Period_df shape: {period_df.shape}")
-    st.write(f"DEBUG: Period_df date range: {period_df['date'].min()} to {period_df['date'].max()}")
     df = period_df.copy()
     has_activity = 'activityName' in df.columns
 
     # Calculate total hours for percentage calculations
     total_hours = df['duration_hours'].sum()
-    
-    # Debug: Show what data we're working with
-    st.write(f"DEBUG: Summary df has {len(df)} rows, total_hours: {total_hours}")
-    st.write(f"DEBUG: Summary df categories: {df['activityCategoryName'].unique()}")
     
     # Use the same order for categories as in the timeline
     ordered_cats = [cat for cat in global_category_order if cat in df['activityCategoryName'].unique()]
@@ -502,10 +485,6 @@ def show_copyable_text(period, period_df):
             for _, row in cat_df.iterrows():
                 lines.append(f"   └─ {hours_to_hhmm(row['duration_hours'])} h")
     text_block = "\n".join(lines)
-    
-    # Debug: Show the actual summary content
-    st.write(f"DEBUG: Generated {len(lines)} lines for summary")
-    st.write(f"DEBUG: First few lines: {lines[:3] if lines else 'No lines'}")
     
     # Simple title without buttons
     st.subheader(f"📋 {period} ({start_date} to {end_date})")
