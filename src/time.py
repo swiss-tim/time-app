@@ -2,61 +2,126 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import os
-import io
-import csv
 import datetime
 import plotly.graph_objects as go
-import plotly.express as px  # <-- Add this import at the top with other imports
 
-# Place this near the top of your file, after the imports, so it's available everywhere:
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+REQUIRED_COLUMNS = [
+    'activityCategoryName',
+    'activityName',
+    'activityStartDate',
+    'activityDuration [ms]'
+]
+
+DEFAULT_CSV_PATH = os.path.join(
+    os.path.dirname(__file__), '..', 'data', 'time.csv'
+)
+
+TIMEZONE_PATTERN = r' GMT[+-]\d{2}:\d{2} '
+MILLISECONDS_PER_HOUR = 1000 * 60 * 60
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+
 def hours_to_hhmm(hours):
+    """Convert decimal hours to HH:MM format.
+
+    Args:
+        hours (float): Hours as decimal number
+
+    Returns:
+        str: Formatted time string (HH:MM)
+    """
     h = int(hours)
     m = int(round((hours - h) * 60))
     return f"{h:02d}:{m:02d}"
 
 # --- Use caching for expensive IO / processing to make button clicks fast ---
+
+
 @st.cache_data
 def load_csv(path):
-    # Load the CSV. Now includes activityName for grouping and notes.
+    """Load CSV file with required columns.
+
+    Args:
+        path (str): Path to CSV file
+
+    Returns:
+        pd.DataFrame: Loaded data with required columns
+    """
     return pd.read_csv(
         path,
-        usecols=['activityCategoryName', 'activityName', 'activityStartDate', 'activityDuration [ms]', 'note'],
+        usecols=REQUIRED_COLUMNS + ['note'],
         sep=',',
         engine='python'
     )
 
+
+def parse_timezone_aware_timestamps(df):
+    """Parse timestamps and remove timezone information.
+
+    Args:
+        df (pd.DataFrame): DataFrame with activityStartDate column
+
+    Returns:
+        pd.DataFrame: DataFrame with parsed timestamps
+    """
+    df['activityStartDate'] = pd.to_datetime(
+        df['activityStartDate'].str.replace(
+            TIMEZONE_PATTERN, ' ', regex=True
+        ),
+        errors='coerce'
+    )
+    df.dropna(subset=['activityStartDate'], inplace=True)
+    return df
+
+
 @st.cache_data
 def build_split(df):
-    # This function now correctly handles timezone-aware timestamps.
-    records = []
-    df = df.copy()
-    df['activityDuration [ms]'] = pd.to_numeric(df['activityDuration [ms]'], errors='coerce')
-    df = df[df['activityDuration [ms]'].notna()].copy()
+    """Split activities that span multiple days and handle timezone issues.
 
-    # --- FINAL, SIMPLIFIED TIMEZONE FIX ---
-    # 1. Parse the date/time part of the string and completely ignore the timezone from the file.
-    #    This creates a "naive" datetime object that represents the time exactly as written.
-    df['activityStartDate'] = pd.to_datetime(df['activityStartDate'].str.replace(r' GMT[+-]\d{2}:\d{2} ', ' ', regex=True), errors='coerce')
-    df.dropna(subset=['activityStartDate'], inplace=True)
-    
+    Args:
+        df (pd.DataFrame): Raw data with activity information
+
+    Returns:
+        pd.DataFrame: Processed data with activities split by day
+    """
+    records = []
+    df_processed = df.copy()
+    df_processed['activityDuration [ms]'] = pd.to_numeric(
+        df_processed['activityDuration [ms]'], errors='coerce'
+    )
+    df_processed = df_processed[df_processed['activityDuration [ms]'].notna(
+    )].copy()
+
+    # Parse timestamps and remove timezone information
+    df_processed = parse_timezone_aware_timestamps(df_processed)
+
     # All subsequent calculations will use this naive local time.
 
-    for _, row in df.iterrows():
-        start = row['activityStartDate'] # This is now a naive local time.
+    for _, row in df_processed.iterrows():
+        start = row['activityStartDate']  # This is now a naive local time.
         duration_ms = float(row['activityDuration [ms]'])
         end = start + pd.Timedelta(milliseconds=duration_ms)
         current = start
         remaining_ms = duration_ms
         while current.date() < end.date():
-            next_day = pd.Timestamp(year=current.year, month=current.month, day=current.day) + pd.Timedelta(days=1)
+            next_day = pd.Timestamp(
+                year=current.year, month=current.month, day=current.day) + pd.Timedelta(days=1)
             ms_in_day = (next_day - current).total_seconds() * 1000
             records.append({
                 'start': current,
                 'end': next_day,
                 'activityCategoryName': row['activityCategoryName'],
-                'activityName': row['activityName'],  # <-- FIX: preserve activityName
+                # <-- FIX: preserve activityName
+                'activityName': row['activityName'],
                 'note': row.get('note', ''),  # <-- FIX: preserve note
-                'duration_hours': ms_in_day / (1000 * 60 * 60)
+                'duration_hours': ms_in_day / MILLISECONDS_PER_HOUR
             })
             remaining_ms -= ms_in_day
             current = next_day
@@ -64,15 +129,17 @@ def build_split(df):
             'start': current,
             'end': end,
             'activityCategoryName': row['activityCategoryName'],
-            'activityName': row['activityName'],  # <-- FIX: preserve activityName
+            # <-- FIX: preserve activityName
+            'activityName': row['activityName'],
             'note': row.get('note', ''),  # <-- FIX: preserve note
-            'duration_hours': remaining_ms / (1000 * 60 * 60)
+            'duration_hours': remaining_ms / MILLISECONDS_PER_HOUR
         })
     df_split_local = pd.DataFrame(records)
     if not df_split_local.empty:
         # The 'date' for grouping is derived directly from the naive start time.
         df_split_local['date'] = df_split_local['start'].dt.date
     return df_split_local
+
 
 # --- Data Loader Section ---
 st.title("Time Tracking App")
@@ -92,46 +159,58 @@ if uploaded_file is not None:
         # Read the uploaded file
         df_raw = pd.read_csv(
             uploaded_file,
-            usecols=['activityCategoryName', 'activityName', 'activityStartDate', 'activityDuration [ms]', 'note'],
+            usecols=['activityCategoryName', 'activityName',
+                     'activityStartDate', 'activityDuration [ms]', 'note'],
             sep=',',
             engine='python'
         )
-        
+
         # Validate the uploaded file has required columns
-        required_columns = ['activityCategoryName', 'activityName', 'activityStartDate', 'activityDuration [ms]']
-        missing_columns = [col for col in required_columns if col not in df_raw.columns]
-        
+        required_columns = ['activityCategoryName', 'activityName',
+                            'activityStartDate', 'activityDuration [ms]']
+        missing_columns = [
+            col for col in required_columns if col not in df_raw.columns]
+
         if missing_columns:
-            st.error(f"❌ Uploaded file is missing required columns: {', '.join(missing_columns)}")
-            st.info("Required columns: activityCategoryName, activityName, activityStartDate, activityDuration [ms]")
+            st.error(
+                f"❌ Uploaded file is missing required columns: {', '.join(missing_columns)}")
+            st.info(
+                "Required columns: activityCategoryName, activityName, activityStartDate, activityDuration [ms]")
             st.info("Falling back to default data file.")
             # Fallback to default file
-            csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')
+            csv_path = os.path.join(os.path.dirname(
+                __file__), '..', 'data', 'time.csv')
             df_raw = load_csv(csv_path)
         else:
             # Check if file has data
             if df_raw.empty:
-                st.warning("⚠️ Uploaded file is empty. Falling back to default data file.")
-                csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')
+                st.warning(
+                    "⚠️ Uploaded file is empty. Falling back to default data file.")
+                csv_path = os.path.join(os.path.dirname(
+                    __file__), '..', 'data', 'time.csv')
                 df_raw = load_csv(csv_path)
             else:
                 pass
     except pd.errors.EmptyDataError:
         st.error("❌ Uploaded file is empty or invalid CSV format.")
         st.info("Falling back to default data file.")
-        csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')
+        csv_path = os.path.join(os.path.dirname(
+            __file__), '..', 'data', 'time.csv')
         df_raw = load_csv(csv_path)
     except Exception as e:
         st.error(f"❌ Error loading uploaded file: {str(e)}")
         st.info("Falling back to default data file.")
         # Fallback to default file
-        csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')
+        csv_path = os.path.join(os.path.dirname(
+            __file__), '..', 'data', 'time.csv')
         df_raw = load_csv(csv_path)
 else:
     # Use default file
-    csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')
+    csv_path = os.path.join(os.path.dirname(
+        __file__), '..', 'data', 'time.csv')
     df_raw = load_csv(csv_path)
-    st.info("📁 Using default data file. Upload a CSV file above to analyze your own data.")
+    st.info(
+        "📁 Using default data file. Upload a CSV file above to analyze your own data.")
 
 # Process the data
 df_split = build_split(df_raw)
@@ -151,9 +230,11 @@ if not df_split.empty:
     with col1:
         st.metric("Total Records", len(df_raw))
     with col2:
-        st.metric("Date Range", f"{df_split['date'].min()} to {df_split['date'].max()}")
+        st.metric("Date Range",
+                  f"{df_split['date'].min()} to {df_split['date'].max()}")
     with col3:
-        st.metric("Activity Categories", df_split['activityCategoryName'].nunique())
+        st.metric("Activity Categories",
+                  df_split['activityCategoryName'].nunique())
 else:
     st.warning("⚠️ No valid data found in the selected file.")
 
@@ -162,21 +243,27 @@ else:
 # Data will be filtered directly from the main df_split dataframe in the timeline_for_period function.
 
 # --- faster navigation: use on_click handlers that only mutate session state ---
+
+
 def shift_period_left(period):
     cur = st.session_state.get(f"current_{period}")
     if cur is None:
         st.session_state[f"current_{period}"] = df_split['date'].max()
         return
     if period == "Day":
-        st.session_state[f"current_{period}"] = cur - datetime.timedelta(days=1)
+        st.session_state[f"current_{period}"] = cur - \
+            datetime.timedelta(days=1)
     elif period == "Week":
-        st.session_state[f"current_{period}"] = cur - datetime.timedelta(weeks=1)
+        st.session_state[f"current_{period}"] = cur - \
+            datetime.timedelta(weeks=1)
     elif period == "Month":
         month = cur.month - 1 or 12
         year = cur.year - (1 if month == 12 else 0)
-        st.session_state[f"current_{period}"] = datetime.date(year, month, min(cur.day, 28))
+        st.session_state[f"current_{period}"] = datetime.date(
+            year, month, min(cur.day, 28))
     elif period == "Year":
         st.session_state[f"current_{period}"] = cur.replace(year=cur.year - 1)
+
 
 def shift_period_right(period):
     cur = st.session_state.get(f"current_{period}")
@@ -184,23 +271,29 @@ def shift_period_right(period):
         st.session_state[f"current_{period}"] = df_split['date'].max()
         return
     if period == "Day":
-        st.session_state[f"current_{period}"] = cur + datetime.timedelta(days=1)
+        st.session_state[f"current_{period}"] = cur + \
+            datetime.timedelta(days=1)
     elif period == "Week":
-        st.session_state[f"current_{period}"] = cur + datetime.timedelta(weeks=1)
+        st.session_state[f"current_{period}"] = cur + \
+            datetime.timedelta(weeks=1)
     elif period == "Month":
         month = cur.month + 1
         year = cur.year + (1 if month > 12 else 0)
         month = month if month <= 12 else 1
-        st.session_state[f"current_{period}"] = datetime.date(year, month, min(cur.day, 28))
+        st.session_state[f"current_{period}"] = datetime.date(
+            year, month, min(cur.day, 28))
     elif period == "Year":
         st.session_state[f"current_{period}"] = cur.replace(year=cur.year + 1)
 
+
 # --- 2. Aggregate and Sort Data ---
 if not df_split.empty:
-    category_duration = df_split.groupby(['date', 'activityCategoryName'])['duration_hours'].sum().unstack(fill_value=0)
+    category_duration = df_split.groupby(['date', 'activityCategoryName'])[
+        'duration_hours'].sum().unstack(fill_value=0)
     category_duration = category_duration.round(9)
 
-    yearly_totals = df_split.groupby('activityCategoryName')['duration_hours'].sum()
+    yearly_totals = df_split.groupby('activityCategoryName')[
+        'duration_hours'].sum()
     total_duration_sorted = yearly_totals.sort_values(ascending=False)
     category_duration_sorted = category_duration[total_duration_sorted.index]
 
@@ -210,21 +303,25 @@ else:
 
 
 # toggle to include/remove Sleep category (controls stacking + legend + pie)
-include_sleep = st.checkbox("Include 'Sleep' category", value=True, key='include_sleep')
+include_sleep = st.checkbox(
+    "Include 'Sleep' category", value=True, key='include_sleep')
 
 # active order used for all charts (remove sleep when toggle is off)
 if include_sleep:
     active_category_order = global_category_order
 else:
-    active_category_order = [c for c in global_category_order if str(c).strip().lower() != 'sleep']
+    active_category_order = [
+        c for c in global_category_order if str(c).strip().lower() != 'sleep']
 
 # --- 4. Streamlit Altair Chart (moved into tabs so it reflects the period table) ---
+
 
 def timeline_for_period(period):
     # init current period pointer
     if f"current_{period}" not in st.session_state:
-        st.session_state[f"current_{period}"] = df_split['date'].max() if not df_split.empty else datetime.date.today()
-    
+        st.session_state[f"current_{period}"] = df_split['date'].max(
+        ) if not df_split.empty else datetime.date.today()
+
     # Force update to latest date if current date doesn't exist in data
     if not df_split.empty:
         available_dates = df_split['date'].unique()
@@ -243,26 +340,30 @@ def timeline_for_period(period):
     }
     </style>
     """, unsafe_allow_html=True)
-    
+
     # Use actual Streamlit buttons
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.button("←", key=f"left_{period}", on_click=shift_period_left, args=(period,))
+        st.button("←", key=f"left_{period}",
+                  on_click=shift_period_left, args=(period,))
     with col2:
-        st.button("→", key=f"right_{period}", on_click=shift_period_right, args=(period,))
+        st.button("→", key=f"right_{period}",
+                  on_click=shift_period_right, args=(period,))
 
     # --- BUG FIX for disappearing data ---
     # compute date range and fetch rows by filtering the main dataframe directly.
-    start_date, end_date = get_period_dates(period, st.session_state.get(f"current_{period}"))
+    start_date, end_date = get_period_dates(
+        period, st.session_state.get(f"current_{period}"))
     if not df_split.empty:
-        period_df = df_split[(df_split['date'] >= start_date) & (df_split['date'] <= end_date)].copy()
+        period_df = df_split[(df_split['date'] >= start_date) & (
+            df_split['date'] <= end_date)].copy()
     else:
         period_df = pd.DataFrame(columns=df_split.columns)
 
-
     # optionally remove Sleep rows based on toggle
     if not include_sleep and not period_df.empty:
-        period_df = period_df[period_df['activityCategoryName'].astype(str).str.lower() != 'sleep']
+        period_df = period_df[period_df['activityCategoryName'].astype(
+            str).str.lower() != 'sleep']
 
     # ensure date column exists
     if 'date' not in period_df.columns and 'start' in period_df.columns:
@@ -275,20 +376,23 @@ def timeline_for_period(period):
     # --- Build chart from period_df ---
     if not period_df.empty:
         # Add formatted duration column for tooltips
-        period_df['duration_hhmm'] = period_df['duration_hours'].apply(hours_to_hhmm)
+        period_df['duration_hhmm'] = period_df['duration_hours'].apply(
+            hours_to_hhmm)
 
         if period == "Day":
             period_df['start_dt'] = pd.to_datetime(period_df['start'])
             period_df['end_dt'] = pd.to_datetime(period_df['end'])
-            period_df['Activity Category'] = period_df['activityCategoryName'].astype(str)
+            period_df['Activity Category'] = period_df['activityCategoryName'].astype(
+                str)
             period_df['Activity Category'] = pd.Categorical(
                 period_df['Activity Category'],
                 categories=active_category_order,
                 ordered=True
             )
             rank_map = {cat: i for i, cat in enumerate(global_category_order)}
-            period_df['cat_rank'] = period_df['Activity Category'].astype(str).map(rank_map)
-            
+            period_df['cat_rank'] = period_df['Activity Category'].astype(
+                str).map(rank_map)
+
             bars = alt.Chart(period_df).mark_bar(size=14).encode(
                 x=alt.X('start_dt:T',
                         axis=alt.Axis(format='%H', title='', grid=True, tickCount=13, labelLimit=0)),
@@ -299,13 +403,16 @@ def timeline_for_period(period):
                         scale=alt.Scale(domain=active_category_order)),
                 color=alt.Color(
                     'Activity Category:N',
-                    scale=alt.Scale(domain=global_category_order, scheme='category20'),
+                    scale=alt.Scale(domain=global_category_order,
+                                    scheme='category20'),
                     legend=None
                 ),
                 tooltip=[
                     alt.Tooltip('activityCategoryName:N', title='Category'),
-                    alt.Tooltip('start_dt:T', title='Start', format='%Y-%m-%d %H:%M'),
-                    alt.Tooltip('end_dt:T', title='End', format='%Y-%m-%d %H:%M'),
+                    alt.Tooltip('start_dt:T', title='Start',
+                                format='%Y-%m-%d %H:%M'),
+                    alt.Tooltip('end_dt:T', title='End',
+                                format='%Y-%m-%d %H:%M'),
                     alt.Tooltip('duration_hhmm:N', title='Duration (hh:mm)'),
                     alt.Tooltip('activityName:N', title='Activity')
                 ]
@@ -320,11 +427,14 @@ def timeline_for_period(period):
             st.altair_chart(chart_day, use_container_width=True)
 
         else:
-            agg = period_df.groupby(['date', 'activityCategoryName'])['duration_hours'].sum().unstack(fill_value=0)
+            agg = period_df.groupby(['date', 'activityCategoryName'])[
+                'duration_hours'].sum().unstack(fill_value=0)
             agg = agg.sort_index()
-            df_melt_period = agg.reset_index().melt(id_vars='date', var_name='Activity Category', value_name='Duration (hours)')
+            df_melt_period = agg.reset_index().melt(
+                id_vars='date', var_name='Activity Category', value_name='Duration (hours)')
             df_melt_period['date'] = pd.to_datetime(df_melt_period['date'])
-            df_melt_period['Duration (hours)'] = pd.to_numeric(df_melt_period['Duration (hours)'], errors='coerce').fillna(0)
+            df_melt_period['Duration (hours)'] = pd.to_numeric(
+                df_melt_period['Duration (hours)'], errors='coerce').fillna(0)
             df_melt_period = df_melt_period[df_melt_period['Duration (hours)'] > 0]
             df_melt_period['Activity Category'] = pd.Categorical(
                 df_melt_period['Activity Category'].astype(str),
@@ -332,9 +442,11 @@ def timeline_for_period(period):
                 ordered=True
             )
             rank_map = {cat: i for i, cat in enumerate(global_category_order)}
-            df_melt_period['cat_rank'] = df_melt_period['Activity Category'].astype(str).map(rank_map)
+            df_melt_period['cat_rank'] = df_melt_period['Activity Category'].astype(
+                str).map(rank_map)
             # Add formatted duration column for tooltips
-            df_melt_period['duration_hhmm'] = df_melt_period['Duration (hours)'].apply(hours_to_hhmm)
+            df_melt_period['duration_hhmm'] = df_melt_period['Duration (hours)'].apply(
+                hours_to_hhmm)
 
             if df_melt_period.empty:
                 st.info("No non-zero activity durations in this period to chart.")
@@ -347,14 +459,17 @@ def timeline_for_period(period):
                     y=alt.Y('Duration (hours):Q', stack='zero'),
                     color=alt.Color(
                         'Activity Category:N',
-                        scale=alt.Scale(domain=global_category_order, scheme='category20'),
-                        legend=alt.Legend(title='Activity Category', orient='bottom', direction='horizontal', columns=5)
+                        scale=alt.Scale(
+                            domain=global_category_order, scheme='category20'),
+                        legend=alt.Legend(
+                            title='Activity Category', orient='bottom', direction='horizontal', columns=5)
                     ),
                     order=alt.Order('cat_rank:Q', sort='ascending'),
                     tooltip=[
                         alt.Tooltip('date:T', title='Date'),
                         alt.Tooltip('Activity Category:N', title='Category'),
-                        alt.Tooltip('duration_hhmm:N', title='Duration (hh:mm)')
+                        alt.Tooltip('duration_hhmm:N',
+                                    title='Duration (hh:mm)')
                     ]
                 ).properties(
                     width=900,
@@ -369,23 +484,28 @@ def timeline_for_period(period):
     timeline_display = period_df.copy().sort_values(['start'], ascending=False)
     if not timeline_display.empty:
         # The 'start' and 'end' columns are already naive local times.
-        timeline_display['Start Date'] = pd.to_datetime(timeline_display['start']).dt.strftime('%b-%d %a %H:%M')
-        timeline_display['End Date'] = pd.to_datetime(timeline_display['end']).dt.strftime('%b-%d %a %H:%M')
-    
+        timeline_display['Start Date'] = pd.to_datetime(
+            timeline_display['start']).dt.strftime('%b-%d %a %H:%M')
+        timeline_display['End Date'] = pd.to_datetime(
+            timeline_display['end']).dt.strftime('%b-%d %a %H:%M')
+
     # Pie chart: show category share for the selected period using the same colors
     if not period_df.empty:
         pie_df = (period_df.groupby('activityCategoryName')['duration_hours']
-                    .sum()
-                    .rename_axis('Category')
-                    .reset_index())
+                  .sum()
+                  .rename_axis('Category')
+                  .reset_index())
         pie_df['Category'] = pie_df['Category'].astype(str)
         pie_df = pie_df[pie_df['duration_hours'] > 0]
 
         if not pie_df.empty:
-            pie_df['Percentage'] = (pie_df['duration_hours'] / pie_df['duration_hours'].sum() * 100).round(1)
-            pie_labels = pie_df.apply(lambda r: f"{r['Category']}<br>{r['Percentage']}%", axis=1)
+            pie_df['Percentage'] = (
+                pie_df['duration_hours'] / pie_df['duration_hours'].sum() * 100).round(1)
+            pie_labels = pie_df.apply(
+                lambda r: f"{r['Category']}<br>{r['Percentage']}%", axis=1)
             # Use hours_to_hhmm for hover text
-            pie_hovertext = pie_df.apply(lambda r: f"{r['Category']}<br>{r['Percentage']}%<br>{hours_to_hhmm(r['duration_hours'])} h", axis=1)
+            pie_hovertext = pie_df.apply(
+                lambda r: f"{r['Category']}<br>{r['Percentage']}%<br>{hours_to_hhmm(r['duration_hours'])} h", axis=1)
 
             # Define color_map here using Altair's category20 palette and global_category_order
             alt_category20 = [
@@ -394,8 +514,10 @@ def timeline_for_period(period):
                 "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7", "#bcbd22", "#dbdb8d",
                 "#17becf", "#9edae5"
             ]
-            color_map = {cat: alt_category20[i % len(alt_category20)] for i, cat in enumerate(global_category_order)}
-            pie_colors = [color_map.get(cat, "#CCCCCC") for cat in pie_df['Category']]
+            color_map = {cat: alt_category20[i % len(
+                alt_category20)] for i, cat in enumerate(global_category_order)}
+            pie_colors = [color_map.get(cat, "#CCCCCC")
+                          for cat in pie_df['Category']]
 
             fig = go.Figure()
             fig.add_trace(go.Pie(
@@ -409,7 +531,8 @@ def timeline_for_period(period):
                 marker=dict(colors=pie_colors),
                 showlegend=False
             ))
-            fig.update_traces(textposition='auto', insidetextorientation='horizontal')
+            fig.update_traces(textposition='auto',
+                              insidetextorientation='horizontal')
             fig.update_layout(
                 title=f'Category share ({period})',
                 height=600,
@@ -435,6 +558,7 @@ def timeline_for_period(period):
             'note': 'Notes'
         }), height=300)
 
+
 def show_copyable_text(period, period_df):
     # Get the date range for the selected tab
     current_date = st.session_state.get(f"current_{period}")
@@ -444,17 +568,20 @@ def show_copyable_text(period, period_df):
 
     # Calculate total hours for percentage calculations
     total_hours = df['duration_hours'].sum()
-    
+
     # Use the same order for categories as in the timeline
-    ordered_cats = [cat for cat in global_category_order if cat in df['activityCategoryName'].unique()]
+    ordered_cats = [
+        cat for cat in global_category_order if cat in df['activityCategoryName'].unique()]
     lines = []
     for cat in ordered_cats:
         cat_df = df[df['activityCategoryName'] == cat]
         if cat_df.empty:
             continue
         total_cat_hours = cat_df['duration_hours'].sum()
-        cat_percentage = int(round((total_cat_hours / total_hours) * 100)) if total_hours > 0 else 0
-        lines.append(f"{cat_percentage:02d}% {hours_to_hhmm(total_cat_hours)}h {cat}")
+        cat_percentage = int(
+            round((total_cat_hours / total_hours) * 100)) if total_hours > 0 else 0
+        lines.append(
+            f"{cat_percentage:02d}% {hours_to_hhmm(total_cat_hours)}h {cat}")
         if has_activity:
             # Get activities with their total durations and sort by duration (descending)
             activity_durations = []
@@ -462,33 +589,36 @@ def show_copyable_text(period, period_df):
                 act_df = cat_df[cat_df['activityName'] == act]
                 act_hours = act_df['duration_hours'].sum()
                 activity_durations.append((act, act_hours, act_df))
-            
+
             # Sort by duration (longest first)
             activity_durations.sort(key=lambda x: x[1], reverse=True)
-            
+
             for act, act_hours, act_df in activity_durations:
                 # Calculate activity percentage of total time
-                act_percentage = int(round((act_hours / total_hours) * 100)) if total_hours > 0 else 0
-                
+                act_percentage = int(
+                    round((act_hours / total_hours) * 100)) if total_hours > 0 else 0
+
                 # Collect unique notes for this activity
                 notes = act_df['note'].dropna().astype(str).str.strip()
                 notes = notes[notes != ''].unique()
-                
+
                 if len(notes) > 0:
                     notes_str = ', '.join(notes[:3])  # Limit to first 3 notes
                     if len(notes) > 3:
                         notes_str += f' (+{len(notes)-3} more)'
-                    lines.append(f"   └─ {act_percentage:02d}% {hours_to_hhmm(act_hours)}h {act} ({notes_str})")
+                    lines.append(
+                        f"   └─ {act_percentage:02d}% {hours_to_hhmm(act_hours)}h {act} ({notes_str})")
                 else:
-                    lines.append(f"   └─ {act_percentage:02d}% {hours_to_hhmm(act_hours)}h {act}")
+                    lines.append(
+                        f"   └─ {act_percentage:02d}% {hours_to_hhmm(act_hours)}h {act}")
         else:
             for _, row in cat_df.iterrows():
                 lines.append(f"   └─ {hours_to_hhmm(row['duration_hours'])} h")
     text_block = "\n".join(lines)
-    
+
     # Simple title without buttons
     st.subheader(f"📋 {period} ({start_date} to {end_date})")
-    
+
     # Display the text in a simple, selectable format
     # Use a unique key that changes with the data to force update
     unique_key = f"summary_{period}_{current_date}_{len(df)}"
@@ -501,6 +631,8 @@ def show_copyable_text(period, period_df):
     )
 
 # --- add missing helper and tabs so charts update when session_state changes ---
+
+
 def get_period_dates(period, current_date):
     # normalize to datetime.date
     if current_date is None:
@@ -518,7 +650,8 @@ def get_period_dates(period, current_date):
     elif period == "Month":
         start = current_date.replace(day=1)
         # get first day of next month then subtract one day
-        next_month = (pd.Timestamp(start) + pd.Timedelta(days=32)).replace(day=1).date()
+        next_month = (pd.Timestamp(start) + pd.Timedelta(days=32)
+                      ).replace(day=1).date()
         end = next_month - datetime.timedelta(days=1)
     elif period == "Year":
         start = current_date.replace(month=1, day=1)
@@ -527,8 +660,10 @@ def get_period_dates(period, current_date):
         start = end = current_date
     return start, end
 
+
 # create the tabs once (so with tab_day: ... works later)
-tab_day, tab_week, tab_month, tab_year = st.tabs(["Day", "Week", "Month", "Year"])
+tab_day, tab_week, tab_month, tab_year = st.tabs(
+    ["Day", "Week", "Month", "Year"])
 
 # attach tabs (chart + timeline per tab)
 with tab_day:
@@ -539,4 +674,3 @@ with tab_month:
     timeline_for_period("Month")
 with tab_year:
     timeline_for_period("Year")
-

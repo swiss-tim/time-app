@@ -1,0 +1,151 @@
+[1mdiff --git a/src/time.py b/src/time.py[m
+[1mindex ed9558d..b19db64 100644[m
+[1m--- a/src/time.py[m
+[1m+++ b/src/time.py[m
+[36m@@ -9,52 +9,62 @@[m [mimport plotly.graph_objects as go[m
+ import plotly.express as px  # <-- Add this import at the top with other imports[m
+ [m
+ # Place this near the top of your file, after the imports, so it's available everywhere:[m
+[32m+[m
+[32m+[m
+ def hours_to_hhmm(hours):[m
+     h = int(hours)[m
+     m = int(round((hours - h) * 60))[m
+     return f"{h:02d}:{m:02d}"[m
+ [m
+ # --- Use caching for expensive IO / processing to make button clicks fast ---[m
+[32m+[m
+[32m+[m
+ @st.cache_data[m
+ def load_csv(path):[m
+     # Load the CSV. Now includes activityName for grouping and notes.[m
+     return pd.read_csv([m
+         path,[m
+[31m-        usecols=['activityCategoryName', 'activityName', 'activityStartDate', 'activityDuration [ms]', 'note'],[m
+[32m+[m[32m        usecols=['activityCategoryName', 'activityName',[m
+[32m+[m[32m                 'activityStartDate', 'activityDuration [ms]', 'note'],[m
+         sep=',',[m
+         engine='python'[m
+     )[m
+ [m
+[32m+[m
+ @st.cache_data[m
+ def build_split(df):[m
+     # This function now correctly handles timezone-aware timestamps.[m
+     records = [][m
+     df = df.copy()[m
+[31m-    df['activityDuration [ms]'] = pd.to_numeric(df['activityDuration [ms]'], errors='coerce')[m
+[32m+[m[32m    df['activityDuration [ms]'] = pd.to_numeric([m
+[32m+[m[32m        df['activityDuration [ms]'], errors='coerce')[m
+     df = df[df['activityDuration [ms]'].notna()].copy()[m
+ [m
+     # --- FINAL, SIMPLIFIED TIMEZONE FIX ---[m
+     # 1. Parse the date/time part of the string and completely ignore the timezone from the file.[m
+     #    This creates a "naive" datetime object that represents the time exactly as written.[m
+[31m-    df['activityStartDate'] = pd.to_datetime(df['activityStartDate'].str.replace(r' GMT[+-]\d{2}:\d{2} ', ' ', regex=True), errors='coerce')[m
+[32m+[m[32m    df['activityStartDate'] = pd.to_datetime(df['activityStartDate'].str.replace([m
+[32m+[m[32m        r' GMT[+-]\d{2}:\d{2} ', ' ', regex=True), errors='coerce')[m
+     df.dropna(subset=['activityStartDate'], inplace=True)[m
+[31m-    [m
+[32m+[m
+     # All subsequent calculations will use this naive local time.[m
+ [m
+     for _, row in df.iterrows():[m
+[31m-        start = row['activityStartDate'] # This is now a naive local time.[m
+[32m+[m[32m        start = row['activityStartDate']  # This is now a naive local time.[m
+         duration_ms = float(row['activityDuration [ms]'])[m
+         end = start + pd.Timedelta(milliseconds=duration_ms)[m
+         current = start[m
+         remaining_ms = duration_ms[m
+         while current.date() < end.date():[m
+[31m-            next_day = pd.Timestamp(year=current.year, month=current.month, day=current.day) + pd.Timedelta(days=1)[m
+[32m+[m[32m            next_day = pd.Timestamp([m
+[32m+[m[32m                year=current.year, month=current.month, day=current.day) + pd.Timedelta(days=1)[m
+             ms_in_day = (next_day - current).total_seconds() * 1000[m
+             records.append({[m
+                 'start': current,[m
+                 'end': next_day,[m
+                 'activityCategoryName': row['activityCategoryName'],[m
+[31m-                'activityName': row['activityName'],  # <-- FIX: preserve activityName[m
+[32m+[m[32m                # <-- FIX: preserve activityName[m
+[32m+[m[32m                'activityName': row['activityName'],[m
+                 'note': row.get('note', ''),  # <-- FIX: preserve note[m
+                 'duration_hours': ms_in_day / (1000 * 60 * 60)[m
+             })[m
+[36m@@ -64,7 +74,8 @@[m [mdef build_split(df):[m
+             'start': current,[m
+             'end': end,[m
+             'activityCategoryName': row['activityCategoryName'],[m
+[31m-            'activityName': row['activityName'],  # <-- FIX: preserve activityName[m
+[32m+[m[32m            # <-- FIX: preserve activityName[m
+[32m+[m[32m            'activityName': row['activityName'],[m
+             'note': row.get('note', ''),  # <-- FIX: preserve note[m
+             'duration_hours': remaining_ms / (1000 * 60 * 60)[m
+         })[m
+[36m@@ -74,6 +85,7 @@[m [mdef build_split(df):[m
+         df_split_local['date'] = df_split_local['start'].dt.date[m
+     return df_split_local[m
+ [m
+[32m+[m
+ # --- Data Loader Section ---[m
+ st.title("Time Tracking App")[m
+ st.markdown("### Data Loader")[m
+[36m@@ -92,46 +104,58 @@[m [mif uploaded_file is not None:[m
+         # Read the uploaded file[m
+         df_raw = pd.read_csv([m
+             uploaded_file,[m
+[31m-            usecols=['activityCategoryName', 'activityName', 'activityStartDate', 'activityDuration [ms]', 'note'],[m
+[32m+[m[32m            usecols=['activityCategoryName', 'activityName',[m
+[32m+[m[32m                     'activityStartDate', 'activityDuration [ms]', 'note'],[m
+             sep=',',[m
+             engine='python'[m
+         )[m
+[31m-        [m
+[32m+[m
+         # Validate the uploaded file has required columns[m
+[31m-        required_columns = ['activityCategoryName', 'activityName', 'activityStartDate', 'activityDuration [ms]'][m
+[31m-        missing_columns = [col for col in required_columns if col not in df_raw.columns][m
+[31m-        [m
+[32m+[m[32m        required_columns = ['activityCategoryName', 'activityName',[m
+[32m+[m[32m                            'activityStartDate', 'activityDuration [ms]'][m
+[32m+[m[32m        missing_columns = [[m
+[32m+[m[32m            col for col in required_columns if col not in df_raw.columns][m
+[32m+[m
+         if missing_columns:[m
+[31m-            st.error(f"❌ Uploaded file is missing required columns: {', '.join(missing_columns)}")[m
+[31m-            st.info("Required columns: activityCategoryName, activityName, activityStartDate, activityDuration [ms]")[m
+[32m+[m[32m            st.error([m
+[32m+[m[32m                f"❌ Uploaded file is missing required columns: {', '.join(missing_columns)}")[m
+[32m+[m[32m            st.info([m
+[32m+[m[32m                "Required columns: activityCategoryName, activityName, activityStartDate, activityDuration [ms]")[m
+             st.info("Falling back to default data file.")[m
+             # Fallback to default file[m
+[31m-            csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')[m
+[32m+[m[32m            csv_path = os.path.join(os.path.dirname([m
+[32m+[m[32m                __file__), '..', 'data', 'time.csv')[m
+             df_raw = load_csv(csv_path)[m
+         else:[m
+             # Check if file has data[m
+             if df_raw.empty:[m
+[31m-                st.warning("⚠️ Uploaded file is empty. Falling back to default data file.")[m
+[31m-                csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')[m
+[32m+[m[32m                st.warning([m
+[32m+[m[32m                    "⚠️ Uploaded file is empty. Falling back to default data file.")[m
+[32m+[m[32m                csv_path = os.path.join(os.path.dirname([m
+[32m+[m[32m                    __file__), '..', 'data', 'time.csv')[m
+                 df_raw = load_csv(csv_path)[m
+             else:[m
+                 pass[m
+     except pd.errors.EmptyDataError:[m
+         st.error("❌ Uploaded file is empty or invalid CSV format.")[m
+         st.info("Falling back to default data file.")[m
+[31m-        csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')[m
+[32m+[m[32m        csv_path = os.path.join(os.path.dirname([m
+[32m+[m[32m            __file__), '..', 'data', 'time.csv')[m
+         df_raw = load_csv(csv_path)[m
+     except Exception as e:[m
+         st.error(f"❌ Error loading uploaded file: {str(e)}")[m
+         st.info("Falling back to default data file.")[m
+         # Fallback to default file[m
+[31m-        csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'time.csv')[m
+[32m+[m[32m        
