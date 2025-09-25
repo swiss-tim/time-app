@@ -458,6 +458,10 @@ def show_copyable_text(period, period_df):
     # Calculate total hours for percentage calculations
     total_hours = df['duration_hours'].sum()
     
+    # Debug: Show what data we're working with
+    st.write(f"DEBUG: Summary df has {len(df)} rows, total_hours: {total_hours}")
+    st.write(f"DEBUG: Summary df categories: {df['activityCategoryName'].unique()}")
+    
     # Use the same order for categories as in the timeline
     ordered_cats = [cat for cat in global_category_order if cat in df['activityCategoryName'].unique()]
     lines = []
@@ -498,6 +502,10 @@ def show_copyable_text(period, period_df):
             for _, row in cat_df.iterrows():
                 lines.append(f"   └─ {hours_to_hhmm(row['duration_hours'])} h")
     text_block = "\n".join(lines)
+    
+    # Debug: Show the actual summary content
+    st.write(f"DEBUG: Generated {len(lines)} lines for summary")
+    st.write(f"DEBUG: First few lines: {lines[:3] if lines else 'No lines'}")
     
     # Simple title without buttons
     st.subheader(f"📋 {period} ({start_date} to {end_date})")
